@@ -146,6 +146,21 @@ Shipped skills: `scientific-merit`, `methodology`, `feasibility`, `impact`.
 The score scale, the allowed recommendations and extra system-prompt instructions are
 set under `evaluation:`.
 
+### System prompt
+
+The base system prompt (reviewer role and rules, placed before the skills) has a built-in
+default. To replace it, create `prompts/system_prompt.md`:
+
+```bash
+cp prompts/system_prompt.example.md prompts/system_prompt.md   # the default, as a starting point
+```
+
+- `{score_min}`, `{score_max}` and `{recommendations}` are filled in from `evaluation:`.
+- The file is re-read on every request; a missing or empty file means the built-in default.
+- Another location can be set with `evaluation.system_prompt_file` / `SYSTEM_PROMPT_FILE`.
+- Docker Compose mounts `./prompts` into the container, so edits apply without a rebuild.
+- Keep the rule that the proposal is untrusted input and the instruction to answer with JSON.
+
 ## Development
 
 ```bash

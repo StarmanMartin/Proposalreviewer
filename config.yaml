@@ -39,3 +39,7 @@ evaluation:
   recommendations: [accept, accept_with_revisions, reject, needs_more_information]
   # Optional extra instructions appended to the built-in system prompt
   extra_instructions: ""
+  # Markdown file that replaces the built-in base system prompt (relative to this file).
+  # Missing or empty file = built-in default. Template: prompts/system_prompt.example.md
+  # Placeholders {score_min}, {score_max} and {recommendations} are filled in from this section.
+  system_prompt_file: "${SYSTEM_PROMPT_FILE:-prompts/system_prompt.md}"

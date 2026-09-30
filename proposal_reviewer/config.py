@@ -65,6 +65,8 @@ class EvaluationConfig(BaseModel):
         default_factory=lambda: ["accept", "accept_with_revisions", "reject", "needs_more_information"]
     )
     extra_instructions: str = ""
+    # Markdown file replacing the built-in base system prompt; missing or empty file = built-in default
+    system_prompt_file: str = ""
 
 
 class Settings(BaseModel):
@@ -74,12 +76,21 @@ class Settings(BaseModel):
     evaluation: EvaluationConfig = Field(default_factory=EvaluationConfig)
     config_path: Path | None = None
 
-    @property
-    def skills_dir(self) -> Path:
-        path = Path(self.skills.directory)
+    def _resolve(self, value: str) -> Path:
+        """Relative paths are relative to the config file's directory."""
+        path = Path(value)
         if not path.is_absolute() and self.config_path is not None:
             path = self.config_path.parent / path
         return path
+
+    @property
+    def skills_dir(self) -> Path:
+        return self._resolve(self.skills.directory)
+
+    @property
+    def system_prompt_path(self) -> Path | None:
+        file = self.evaluation.system_prompt_file.strip()
+        return self._resolve(file) if file else None
 
 
 def load_settings(path: str | Path | None = None) -> Settings:

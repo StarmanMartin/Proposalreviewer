@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from proposal_reviewer.client import evaluate_file, format_result
 from proposal_reviewer.config import Settings, load_settings
 from proposal_reviewer.main import create_app
-from proposal_reviewer.prompt import build_system_prompt
+from proposal_reviewer.prompt import BASE_SYSTEM_PROMPT, build_system_prompt, load_base_prompt
 from proposal_reviewer.providers import AIAnswer, parse_json_answer
 from proposal_reviewer.skills import Skill, SkillRegistry, parse_skill, render_skill
 
@@ -145,3 +145,20 @@ def test_client_evaluate_file(client, tmp_path):
     assert "Recommendation: accept" in format_result(body)
     with pytest.raises(RuntimeError, match="400"):
         evaluate_file(client, proposal, skills=["nope"])
+
+
+def test_custom_system_prompt_file(settings, provider, tmp_path):
+    prompt_file = tmp_path / "system_prompt.md"
+    settings.evaluation.system_prompt_file = str(prompt_file)
+    with TestClient(create_app(settings, provider), headers={"X-API-Key": "k1"}) as c:
+        c.post("/api/v1/proposals/evaluate", json={"text": "p"})
+        prompt_file.write_text("# Reviewer\nScale {score_min}-{score_max}, one of {recommendations}. JSON: {}")
+        c.post("/api/v1/proposals/evaluate", json={"text": "p"})
+    default_system, custom_system = provider.calls[0][0], provider.calls[1][0]
+    assert default_system.startswith("You are an expert reviewer")
+    assert custom_system.startswith("# Reviewer\nScale 0-10, one of accept, accept_with_revisions")
+    assert "JSON: {}" in custom_system and "Check alpha." in custom_system
+
+
+def test_system_prompt_example_matches_default():
+    assert load_base_prompt(ROOT / "prompts" / "system_prompt.example.md") == BASE_SYSTEM_PROMPT

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from .config import Settings
 from .models import EvaluationResponse, EvaluationResult, ProposalRequest
-from .prompt import build_system_prompt, build_user_message, evaluation_schema
+from .prompt import build_system_prompt, build_user_message, evaluation_schema, load_base_prompt
 from .providers import AIError, Provider
 from .skills import Skill, SkillError, SkillRegistry
 
@@ -26,7 +26,7 @@ async def evaluate_proposal(
     skills = select_skills(request, registry, settings)
     names = [s.name for s in skills]
     schema = evaluation_schema(settings.evaluation, names)
-    system = build_system_prompt(settings.evaluation, skills)
+    system = build_system_prompt(settings.evaluation, skills, load_base_prompt(settings.system_prompt_path))
     # Anthropic enforces the schema natively; other endpoints get it spelled out in the prompt.
     inline_schema = None if provider.name == "anthropic" else schema
     user = build_user_message(request.title, request.text, request.metadata, inline_schema)

@@ -8,3 +8,5 @@ services:
       # edit skills and config without rebuilding the image
       - ./skills:/app/skills
       - ./config.yaml:/app/config.yaml:ro
+      # custom base system prompt: put it at ./prompts/system_prompt.md
+      - ./prompts:/app/prompts:ro

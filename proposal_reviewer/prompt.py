@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from .config import EvaluationConfig
 from .skills import Skill
 
+# Default base system prompt. Can be replaced by a markdown file (evaluation.system_prompt_file).
+# Placeholders {score_min}, {score_max} and {recommendations} are filled in from the config.
 BASE_SYSTEM_PROMPT = """\
 You are an expert reviewer of research and facility-access proposals.
 Evaluate the proposal you are given strictly according to the evaluation skills below.
@@ -54,14 +57,26 @@ def evaluation_schema(config: EvaluationConfig, skill_names: list[str]) -> dict:
     }
 
 
-def build_system_prompt(config: EvaluationConfig, skills: list[Skill]) -> str:
-    parts = [
-        BASE_SYSTEM_PROMPT.format(
-            score_min=config.score_min,
-            score_max=config.score_max,
-            recommendations=", ".join(config.recommendations),
-        )
-    ]
+def load_base_prompt(path: Path | None) -> str:
+    """Custom base prompt from a markdown file, re-read on every call; built-in default otherwise."""
+    if path is not None and path.is_file():
+        text = path.read_text(encoding="utf-8")
+        if text.strip():
+            return text
+    return BASE_SYSTEM_PROMPT
+
+
+def build_system_prompt(config: EvaluationConfig, skills: list[Skill], base_prompt: str = BASE_SYSTEM_PROMPT) -> str:
+    # Plain replace instead of str.format, so other braces in a custom markdown prompt are left alone.
+    values = {
+        "{score_min}": str(config.score_min),
+        "{score_max}": str(config.score_max),
+        "{recommendations}": ", ".join(config.recommendations),
+    }
+    base = base_prompt.strip()
+    for placeholder, value in values.items():
+        base = base.replace(placeholder, value)
+    parts = [base]
     if config.extra_instructions.strip():
         parts.append(config.extra_instructions.strip())
     parts.append("# Evaluation skills")
