@@ -5,7 +5,7 @@
 server:
   # Keys accepted in the X-API-Key header for evaluation endpoints. Empty list = no auth.
   api_keys: "${PROPOSAL_REVIEWER_API_KEYS:-}"
-  # Key required to create/update/delete skills over the API. Empty = skill editing disabled.
+  # Key required to edit skills and the general context over the API. Empty = editing disabled.
   admin_api_key: "${PROPOSAL_REVIEWER_ADMIN_KEY:-}"
 
 ai:
@@ -25,6 +25,12 @@ ai:
   refusal_fallback: true
   # OpenAI-compatible only: request JSON output via response_format (disable if the server rejects it)
   json_mode: true
+  # Anthropic only: let the model search and read web pages when generating the general context
+  # (POST /api/v1/context/generate). Disable behind proxies that do not support server tools.
+  web_tools: true
+  # OpenAI-compatible only: the service itself downloads the URLs named in a context prompt, plus up
+  # to this many pages they link to on the same site (0 = only the named URLs), and passes the text on.
+  web_max_linked_pages: 50
 
 skills:
   # Directory with one sub-directory per skill, each containing a SKILL.md

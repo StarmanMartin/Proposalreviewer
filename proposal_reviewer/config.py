@@ -49,6 +49,10 @@ class AIConfig(BaseModel):
     effort: str = "high"
     refusal_fallback: bool = True
     json_mode: bool = True
+    # Anthropic only: web search / web fetch server tools for context generation
+    web_tools: bool = True
+    # OpenAI-compatible only: pages linked from the URLs in a context prompt that are read as well
+    web_max_linked_pages: int = Field(default=50, ge=0)
 
 
 class SkillsConfig(BaseModel):

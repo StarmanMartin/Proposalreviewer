@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from .context import Context
 from .skills import NAME_PATTERN
 
 
@@ -78,3 +79,47 @@ class SkillIn(BaseModel):
     weight: float = Field(default=1.0, ge=0)
     enabled: bool = True
     instructions: str = Field(min_length=1)
+
+
+class ContextIn(BaseModel):
+    content: str = Field(min_length=1, description="General context as markdown.")
+
+
+class ContextGenerateRequest(BaseModel):
+    prompt: str = Field(
+        min_length=1,
+        description="What the AI should collect. URLs in the prompt are read by the AI.",
+        examples=["""Research the KIT KNMF technologies listed on https://www.knmf.kit.edu/technologies.php.
+
+Identify all technologies/technology areas presented on the website and summarize the relevant information for each one.
+
+For each technology, provide:
+
+Technology name
+Short description of what the technology is and what it is used for
+Available capabilities / services
+Important technical specifications or characteristics
+Typical applications / use cases
+Materials, samples, or objects that can be analyzed or processed, if stated
+Relevant equipment, methods, or techniques, if mentioned
+Key limitations or requirements, if stated
+Contact information or responsible KNMF facility/group, if available
+Source URL(s)
+
+Follow links from the main technologies page where necessary to obtain the detailed information. Do not omit technologies simply because their information is provided on a subpage.
+
+Present the results in a clear, consistent table, followed by a more detailed description for technologies where a table would not be sufficient.
+
+Focus on factual information provided by KNMF. Do not add assumptions or information from unrelated external sources. If information is not available, explicitly state “Not specified on the website.”
+
+At the end, provide a complete list of all technologies found and indicate the number of technologies reviewed."""
+        ],
+    )
+    save: bool = Field(default=True, description="Store the result as the general context. false = preview only.")
+
+
+class ContextGenerateResponse(BaseModel):
+    context: Context
+    saved: bool
+    provider: str
+    usage: dict[str, Any] = Field(default_factory=dict)

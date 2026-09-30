@@ -21,12 +21,12 @@ def select_skills(request: ProposalRequest, registry: SkillRegistry, settings: S
 
 
 async def evaluate_proposal(
-    request: ProposalRequest, provider: Provider, registry: SkillRegistry, settings: Settings
+    request: ProposalRequest, provider: Provider, registry: SkillRegistry, settings: Settings, context: str = ""
 ) -> EvaluationResponse:
     skills = select_skills(request, registry, settings)
     names = [s.name for s in skills]
     schema = evaluation_schema(settings.evaluation, names)
-    system = build_system_prompt(settings.evaluation, skills, load_base_prompt(settings.system_prompt_path))
+    system = build_system_prompt(settings.evaluation, skills, load_base_prompt(settings.system_prompt_path), context)
     # Anthropic enforces the schema natively; other endpoints get it spelled out in the prompt.
     inline_schema = None if provider.name == "anthropic" else schema
     user = build_user_message(request.title, request.text, request.metadata, inline_schema, registry.area)

@@ -58,6 +58,10 @@ Docker: `docker compose up --build`
 | GET | `/api/v1/skills/{name}[?area=…]` | Show one skill |
 | PUT | `/api/v1/skills/{name}[?area=…]` | Create/replace a skill, in an area if given (admin key) |
 | DELETE | `/api/v1/skills/{name}[?area=…]` | Delete a skill, from an area if given (admin key) |
+| GET | `/api/v1/context` | Show the general context used for all proposals |
+| POST | `/api/v1/context/generate` | Let the AI write the general context from a prompt (admin key) |
+| PUT | `/api/v1/context` | Set the general context by hand (admin key) |
+| DELETE | `/api/v1/context` | Remove the general context (admin key) |
 | GET | `/api/v1/info` | Active provider, model, default skills, subject areas |
 | GET | `/health` | Liveness check |
 
@@ -195,6 +199,34 @@ skills/
 - The area name is also passed to the AI (`Subject area: …`) and returned as `area` in the response.
 - Areas are created by adding a directory, or with `PUT /api/v1/skills/{name}?area=…` (admin key).
   `areas` is reserved and cannot be used as a skill name.
+
+### General context
+
+Background information that the reviewer gets with every proposal, in all subject areas (for
+example what each technology of the facility can and cannot do). It is stored in
+`skills/CONTEXT.md` and placed in the system prompt before the skills.
+
+An admin can have the AI write it from a prompt:
+
+```bash
+curl -X POST localhost:8000/api/v1/context/generate \
+  -H "X-API-Key: $PROPOSAL_REVIEWER_ADMIN_KEY" -H 'Content-Type: application/json' \
+  -d '{"prompt": "Find all areas in https://www.knmf.kit.edu/technologies.php and summarize for each technology the important information"}'
+```
+
+- The result replaces the current context and is returned together with the token usage.
+  `"save": false` only returns it (preview). The request can take several minutes.
+- `provider: anthropic`: Claude reads the pages itself with the web search / web fetch server
+  tools (`ai.web_tools`) and can follow links as needed.
+- `provider: openai`: the service downloads the URLs named in the prompt plus up to
+  `ai.web_max_linked_pages` pages they link to on the same site (linked pages over 50 000
+  characters are skipped) and hands the text to the model. The model needs a context window
+  large enough for that; lower the setting otherwise.
+- `GET /api/v1/context` shows the context and the prompt it was generated from. It can also be
+  written with `PUT /api/v1/context` (`{"content": "…"}`) or by editing `skills/CONTEXT.md`;
+  the file is re-read on every request.
+- Generation makes the server fetch the URLs in the prompt, so it is admin-only. Review the
+  result: it becomes part of the reviewer's system prompt.
 
 The score scale, the allowed recommendations and extra system-prompt instructions are
 set under `evaluation:`.

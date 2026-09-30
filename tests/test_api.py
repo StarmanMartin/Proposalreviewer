@@ -7,7 +7,7 @@ from proposal_reviewer.client import evaluate_file, format_result
 from proposal_reviewer.config import Settings, load_settings
 from proposal_reviewer.main import create_app
 from proposal_reviewer.prompt import BASE_SYSTEM_PROMPT, build_system_prompt, load_base_prompt
-from proposal_reviewer.providers import AIAnswer, parse_json_answer
+from proposal_reviewer.providers import AIAnswer, AIText, html_to_text, parse_json_answer
 from proposal_reviewer.skills import Skill, SkillRegistry, parse_skill, render_skill
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -35,6 +35,10 @@ class FakeProvider:
                 "questions_for_applicant": [],
             },
         )
+
+    async def generate(self, system, user):
+        self.calls.append((system, user, None))
+        return AIText(text="# TEM\nResolution 0.1 nm.", model="fake-model", usage={"output_tokens": 5})
 
 
 @pytest.fixture
@@ -218,3 +222,47 @@ def test_client_evaluate_file_with_area(client, chemistry, tmp_path):
     body = evaluate_file(client, proposal, area="chemistry")
     assert body["skills_applied"] == ["alpha", "beta", "safety"]
     assert "Subject area:   chemistry" in format_result(body)
+
+
+def test_generate_context_is_used_for_all_areas(client, provider, chemistry):
+    body = {"prompt": "Summarise https://example.org/technologies"}
+    assert client.post("/api/v1/context/generate", json=body).status_code == 401
+    assert client.get("/api/v1/context").status_code == 404
+    admin = {"X-API-Key": "admin"}
+
+    preview = client.post("/api/v1/context/generate", json=body | {"save": False}, headers=admin)
+    assert preview.status_code == 200 and preview.json()["saved"] is False
+    assert client.get("/api/v1/context").status_code == 404
+
+    r = client.post("/api/v1/context/generate", json=body, headers=admin)
+    assert r.status_code == 200, r.text
+    assert r.json()["context"]["content"] == "# TEM\nResolution 0.1 nm."
+    assert provider.calls[-1][1] == body["prompt"]
+    stored = client.get("/api/v1/context").json()
+    assert stored["prompt"] == body["prompt"] and stored["model"] == "fake-model" and stored["generated_at"]
+
+    for url in ("/api/v1/proposals/evaluate", "/api/v1/proposals/evaluate?area=chemistry"):
+        assert client.post(url, json={"text": "p"}).status_code == 200
+        system = provider.calls[-1][0]
+        assert "<context>\n# TEM\nResolution 0.1 nm.\n</context>" in system
+        assert system.index("<context>") < system.index("# Evaluation skills")
+    # the context file in the skills directory is not mistaken for a skill
+    assert [s["name"] for s in client.get("/api/v1/skills").json()] == ["alpha", "beta"]
+
+
+def test_context_put_and_delete(client, provider):
+    admin = {"X-API-Key": "admin"}
+    assert client.put("/api/v1/context", json={"content": "By hand."}).status_code == 401
+    assert client.put("/api/v1/context", json={"content": "By hand."}, headers=admin).status_code == 200
+    assert client.get("/api/v1/context").json() == {
+        "content": "By hand.", "prompt": None, "model": None, "generated_at": None
+    }
+    assert client.delete("/api/v1/context", headers=admin).status_code == 204
+    assert client.delete("/api/v1/context", headers=admin).status_code == 404
+    client.post("/api/v1/proposals/evaluate", json={"text": "p"})
+    assert "General context" not in provider.calls[-1][0]
+
+
+def test_html_to_text_drops_scripts():
+    html = "<html><head><title>x</title><script>var a;</script></head><body><h1>TEM</h1><p>0.1 nm</p></body></html>"
+    assert html_to_text(html) == "TEM\n0.1 nm"

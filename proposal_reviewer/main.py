@@ -12,8 +12,17 @@ from pydantic import ValidationError
 
 from . import __version__
 from .config import Settings, get_settings
+from .context import Context, ContextStore, generate_context
 from .evaluator import evaluate_proposal
-from .models import EvaluationResponse, ProposalRequest, SkillIn, SkillOut
+from .models import (
+    ContextGenerateRequest,
+    ContextGenerateResponse,
+    ContextIn,
+    EvaluationResponse,
+    ProposalRequest,
+    SkillIn,
+    SkillOut,
+)
 from .providers import AIError, Provider, create_provider
 from .skills import Skill, SkillError, SkillRegistry
 
@@ -63,14 +72,17 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
     def require_admin_key(state: State, key: Annotated[str | None, Security(api_key_header)]) -> None:
         admin = state[0].server.admin_api_key
         if not admin:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Skill editing is disabled (server.admin_api_key not set)")
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Editing is disabled (server.admin_api_key not set)")
         if not secrets.compare_digest(key or "", admin):
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or missing admin X-API-Key")
 
     async def run_evaluation(body: ProposalRequest, state: tuple, area: str | None) -> EvaluationResponse:
         settings, registry, provider = state
+        context = ContextStore(settings.skills_dir).load()
         try:
-            return await evaluate_proposal(body, provider, registry.for_area(area), settings)
+            return await evaluate_proposal(
+                body, provider, registry.for_area(area), settings, context.content if context else ""
+            )
         except SkillError as e:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
         except AIError as e:
@@ -176,6 +188,48 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
         if not deleted:
             raise HTTPException(status.HTTP_404_NOT_FOUND, f"Skill '{name}' not found")
+
+    @app.get("/api/v1/context", tags=["context"], response_model=Context, dependencies=[Depends(require_api_key)])
+    async def get_context(state: State) -> Context:
+        """General context given to the reviewer with every proposal, in all subject areas."""
+        context = ContextStore(state[0].skills_dir).load()
+        if context is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "No general context set")
+        return context
+
+    @app.put("/api/v1/context", tags=["context"], response_model=Context, dependencies=[Depends(require_admin_key)])
+    async def put_context(body: ContextIn, state: State) -> Context:
+        """Set the general context by hand (requires the admin key)."""
+        return ContextStore(state[0].skills_dir).save(Context(content=body.content))
+
+    @app.post(
+        "/api/v1/context/generate",
+        tags=["context"],
+        response_model=ContextGenerateResponse,
+        dependencies=[Depends(require_admin_key)],
+    )
+    async def generate(body: ContextGenerateRequest, state: State) -> ContextGenerateResponse:
+        """Let the AI write the general context from a prompt, e.g. by summarising web pages
+        named in it, and store it (requires the admin key). Replaces the current context."""
+        settings, _, provider = state
+        try:
+            context, usage = await generate_context(body.prompt, provider)
+        except AIError as e:
+            raise HTTPException(e.status_code, str(e)) from e
+        if body.save:
+            ContextStore(settings.skills_dir).save(context)
+        return ContextGenerateResponse(context=context, saved=body.save, provider=provider.name, usage=usage)
+
+    @app.delete(
+        "/api/v1/context",
+        tags=["context"],
+        status_code=status.HTTP_204_NO_CONTENT,
+        dependencies=[Depends(require_admin_key)],
+    )
+    async def delete_context(state: State) -> None:
+        """Remove the general context (requires the admin key)."""
+        if not ContextStore(state[0].skills_dir).delete():
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "No general context set")
 
     return app
 
