@@ -167,3 +167,7 @@ cp prompts/system_prompt.example.md prompts/system_prompt.md   # the default, as
 uv run pytest
 uv run proposal-reviewer --reload
 ```
+
+## License
+
+MIT, see [LICENSE](LICENSE).
