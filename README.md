@@ -15,6 +15,8 @@ Requires Docker with the Compose plugin. The install script pulls
 KI-Toolbox, Anthropic or another OpenAI-compatible endpoint), and starts the service:
 
 ```bash
+curl -H 'Cache-Control: no-cache' -O https://raw.githubusercontent.com/StarmanMartin/Proposalreviewer/main/install.sh                                                                                                                                                            ──(Wed,Sep30)─┘
+chmod +x install.sh
 ./install.sh [install-dir]     # default: ./proposal-reviewer
 ```
 
