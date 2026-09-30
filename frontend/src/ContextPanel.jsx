@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "./api.js";
 
 const EXAMPLE_PROMPT =
-  "Find all areas in https://www.knmf.kit.edu/technologies.php and summarize for each technology the important information";
+  "Research the KIT KNMF technologies listed on https://www.knmf.kit.edu/technologies.php.\n\nIdentify all technologies/technology areas presented on the website and summarize the relevant information for each one.\n\nFor each technology, provide:\n\nTechnology name\nShort description of what the technology is and what it is used for\nAvailable capabilities / services\nImportant technical specifications or characteristics\nTypical applications / use cases\nMaterials, samples, or objects that can be analyzed or processed, if stated\nRelevant equipment, methods, or techniques, if mentioned\nKey limitations or requirements, if stated\nContact information or responsible KNMF facility/group, if available\nSource URL(s)\n\nFollow links from the main technologies page where necessary to obtain the detailed information. Do not omit technologies simply because their information is provided on a subpage.\n\nPresent the results in a clear, consistent table, followed by a more detailed description for technologies where a table would not be sufficient.\n\nFocus on factual information provided by KNMF. Do not add assumptions or information from unrelated external sources. If information is not available, explicitly state ?Not specified on the website.?\n\nAt the end, provide a complete list of all technologies found and indicate the number of technologies reviewed.";
 
 export default function ContextPanel({ apiKey, adminKey }) {
   const [stored, setStored] = useState(null);
