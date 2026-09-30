@@ -5,3 +5,6 @@ __pycache__/
 .pytest_cache/
 .idea/
 /skills/CONTEXT.md
+node_modules/
+# built web client (npm run build in frontend/)
+proposal_reviewer/static/

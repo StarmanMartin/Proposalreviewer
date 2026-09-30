@@ -1,9 +1,17 @@
+FROM node:22-slim AS frontend
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY frontend ./
+RUN npm run build -- --outDir dist
+
 FROM python:3.13-slim
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /app
 COPY pyproject.toml uv.lock README.md LICENSE ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY proposal_reviewer ./proposal_reviewer
+COPY --from=frontend /frontend/dist ./proposal_reviewer/static
 COPY config.yaml ./
 COPY skills ./skills
 COPY prompts ./prompts

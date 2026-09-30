@@ -4,10 +4,12 @@ import io
 import json
 import secrets
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, Security, UploadFile, status
 from fastapi.security import APIKeyHeader
+from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from . import __version__
@@ -27,6 +29,8 @@ from .providers import AIError, Provider, create_provider
 from .skills import Skill, SkillError, SkillRegistry
 
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+# Built web client (frontend/: `npm run build`); served at / when present
+STATIC_DIR = Path(__file__).parent / "static"
 
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
@@ -230,6 +234,16 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
         """Remove the general context (requires the admin key)."""
         if not ContextStore(state[0].skills_dir).delete():
             raise HTTPException(status.HTTP_404_NOT_FOUND, "No general context set")
+
+    # Mounted last, so the API routes, /docs and /health take precedence.
+    if (STATIC_DIR / "index.html").is_file():
+
+        @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"], include_in_schema=False)
+        async def unknown_api_path(path: str) -> None:
+            """Unknown API paths stay a 404 instead of falling through to the web client."""
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
+
+        app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="web")
 
     return app
 

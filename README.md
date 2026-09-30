@@ -46,10 +46,27 @@ export ANTHROPIC_API_KEY=sk-ant-...
 uv run proposal-reviewer   # http://localhost:8000/docs
 ```
 
+- Web client: `http://localhost:8000/` (Docker image; in development after `npm run build`, see below)
 - Swagger UI: `http://localhost:8000/docs`
 - OpenAPI spec: `http://localhost:8000/openapi.json`
 
 Docker: `docker compose up --build`
+
+## Web client
+
+A small React + Bootstrap client (`frontend/`) is served by the service at `/`. It can upload
+or paste a proposal, pick the subject area and skills, show the evaluation, and show, generate,
+edit or delete the [general context](#general-context). API and admin key are entered under
+"API keys" and kept in the browser's local storage.
+
+```bash
+cd frontend
+npm install
+npm run dev      # http://localhost:5173, forwards /api to the service on :8000
+npm run build    # writes proposal_reviewer/static/, served at http://localhost:8000/
+```
+
+The Docker image builds the client itself; without a build the service runs API-only.
 
 ## API
 

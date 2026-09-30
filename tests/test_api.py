@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from proposal_reviewer.client import evaluate_file, format_result
 from proposal_reviewer import context as context_module
+from proposal_reviewer import main as main_module
 from proposal_reviewer.config import Settings, load_settings
 from proposal_reviewer.main import create_app
 from proposal_reviewer.prompt import BASE_SYSTEM_PROMPT, build_system_prompt, load_base_prompt
@@ -279,3 +280,14 @@ def test_context_cli(tmp_path, monkeypatch, capsys):
     assert context_module.main(["Summarise TEM", "--config", str(config)]) == 0
     stored = context_module.ContextStore(tmp_path / "skills").load()
     assert stored.content == "# TEM\nResolution 0.1 nm." and stored.prompt == "Summarise TEM"
+
+
+def test_web_client_is_served_when_built(settings, provider, tmp_path, monkeypatch):
+    (tmp_path / "static").mkdir()
+    (tmp_path / "static" / "index.html").write_text("<div id=root></div>")
+    monkeypatch.setattr(main_module, "STATIC_DIR", tmp_path / "static")
+    with TestClient(create_app(settings, provider)) as c:
+        assert "id=root" in c.get("/").text
+        assert c.get("/health").json()["status"] == "ok"
+        assert c.get("/api/v1/info").status_code == 401
+        assert c.put("/api/v1/nope", json={}).status_code == 404

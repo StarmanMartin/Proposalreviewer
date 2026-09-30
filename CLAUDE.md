@@ -26,6 +26,14 @@ uv run proposal-reviewer-client FILE [--area X]  # CLI client (proposal_reviewer
 Run against a local Ollama instead of Claude:
 `AI_PROVIDER=openai AI_BASE_URL=http://localhost:11434/v1 AI_MODEL=phi4 uv run proposal-reviewer`
 
+Web client (`frontend/`, Node 22, Vite + React + Bootstrap, plain JSX without TypeScript):
+
+```bash
+cd frontend && npm install
+npm run dev      # :5173, proxies /api and /health to :8000
+npm run build    # -> proposal_reviewer/static/ (git-ignored), served by FastAPI at /
+```
+
 No linter/formatter is configured.
 
 ## Architecture
@@ -42,6 +50,7 @@ Request flow: `main.py` (routes, auth) → `evaluator.py` (skill selection, scor
 - **Scoring** — `overall_score` comes from the model; `weight` per skill and `weighted_score` are filled in by the service in `evaluator.py` from the skill weights (the model never sees/returns weights in the schema).
 - **Providers** (`providers.py`) — implement the `Provider` protocol (`name`, `async evaluate(system, user, schema) -> AIAnswer`). `AnthropicProvider` uses the official SDK with streaming, caches the system prompt (`cache_control: ephemeral`), passes `effort`, and optionally enables the server-side refusal fallback beta (`FALLBACK_BETA` header + `fallbacks: "default"`; disable `ai.refusal_fallback` behind proxies). All endpoint failures are raised as `AIError(message, status_code)`, which `main.py` maps to the HTTP status (502 default, 503 rate limit, 504 unreachable, 422 refusal). `SkillError` maps to 400. `parse_json_answer` tolerates code fences/prose around JSON.
 - **Security model** — the proposal text is untrusted: it is wrapped in `<proposal>` tags and the system prompt tells the model to treat it as data only. Evaluation/read endpoints require an `X-API-Key` from `server.api_keys` (empty = open); skill PUT/DELETE and context PUT/DELETE/generate require `server.admin_api_key` and are disabled (403) when it is empty.
+- **Web client** — `frontend/src`: `api.js` (fetch wrapper, `X-API-Key`), `App.jsx` (keys in localStorage, tabs), `EvaluatePanel.jsx`/`Result.jsx`, `ContextPanel.jsx`. `main.py` mounts `STATIC_DIR` (`proposal_reviewer/static`) at `/` after all routes, only if `index.html` exists; the Dockerfile builds it in a `node` stage. It uses relative URLs, so it must be served from the same origin as the API (no CORS is configured).
 - **File uploads** — `/api/v1/proposals/evaluate/file` accepts PDF (via `pypdf`), `.txt`, `.md`, max 20 MB; form fields `skills` (comma-separated) and `metadata` (JSON string).
 
 `tests/test_api.py::test_shipped_config_and_skills_load` checks that the shipped `config.yaml` and the four skills in `skills/` (`scientific-merit`, `methodology`, `feasibility`, `impact`) load, so keep those valid when editing them.
