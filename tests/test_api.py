@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from proposal_reviewer.client import evaluate_file, format_result
+from proposal_reviewer import context as context_module
 from proposal_reviewer.config import Settings, load_settings
 from proposal_reviewer.main import create_app
 from proposal_reviewer.prompt import BASE_SYSTEM_PROMPT, build_system_prompt, load_base_prompt
@@ -266,3 +267,15 @@ def test_context_put_and_delete(client, provider):
 def test_html_to_text_drops_scripts():
     html = "<html><head><title>x</title><script>var a;</script></head><body><h1>TEM</h1><p>0.1 nm</p></body></html>"
     assert html_to_text(html) == "TEM\n0.1 nm"
+
+
+def test_context_cli(tmp_path, monkeypatch, capsys):
+    config = tmp_path / "config.yaml"
+    config.write_text("skills:\n  directory: skills\n")
+    monkeypatch.setattr(context_module, "create_provider", lambda ai: FakeProvider())
+    assert context_module.main(["Summarise TEM", "--config", str(config), "--dry-run"]) == 0
+    assert "Resolution 0.1 nm." in capsys.readouterr().out
+    assert not (tmp_path / "skills" / "CONTEXT.md").exists()
+    assert context_module.main(["Summarise TEM", "--config", str(config)]) == 0
+    stored = context_module.ContextStore(tmp_path / "skills").load()
+    assert stored.content == "# TEM\nResolution 0.1 nm." and stored.prompt == "Summarise TEM"

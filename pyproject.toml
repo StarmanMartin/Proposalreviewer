@@ -20,6 +20,7 @@ dependencies = [
 [project.scripts]
 proposal-reviewer = "proposal_reviewer.__main__:main"
 proposal-reviewer-client = "proposal_reviewer.client:main"
+proposal-reviewer-context = "proposal_reviewer.context:main"
 
 [dependency-groups]
 dev = ["pytest>=8", "pytest-asyncio>=0.23"]

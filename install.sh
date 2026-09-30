@@ -8,13 +8,15 @@
 #   docker-compose.yml   runs the image
 #   .env                 AI endpoint and API keys (asked for interactively)
 #   config.yaml          service configuration
-#   skills/              evaluation skills (SKILL.md files)
+#   skills/              evaluation skills (SKILL.md files) and the general context (CONTEXT.md)
 #   prompts/             optional custom system prompt (system_prompt.md)
 # Existing files are never overwritten, so re-running the script upgrades the image only.
 #
 # Non-interactive use: set the answers as environment variables, e.g.
 #   AI_PROVIDER=openai AI_BASE_URL=https://ki-toolbox.scc.kit.edu/api AI_API_KEY=... AI_MODEL=... ./install.sh
-# Other variables: IMAGE (default below), PORT (default 8000), NO_START=1 (do not start the service).
+# Other variables: IMAGE (default below), PORT (default 8000), NO_START=1 (do not start the service),
+#   CONTEXT_PROMPT (prompt the AI uses to write the general context; "skip" = do not generate it.
+#   Without a terminal the context is only generated when CONTEXT_PROMPT is set).
 
 set -euo pipefail
 
@@ -22,6 +24,7 @@ IMAGE="${IMAGE:-mstarman/knmfi-proposalreviewer:0.0.2}"
 PORT="${PORT:-8000}"
 DIR="${1:-proposal-reviewer}"
 KI_TOOLBOX_URL="https://ki-toolbox.scc.kit.edu/api"
+DEFAULT_CONTEXT_PROMPT="Find all areas in https://www.knmf.kit.edu/technologies.php and summarize for each technology the important information"
 
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mWarning:\033[0m %s\n' "$*" >&2; }
@@ -43,6 +46,42 @@ random_key() {
         openssl rand -hex 24
     else
         head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n'
+    fi
+}
+
+# Let the AI write the general context (skills/CONTEXT.md) that is used for every proposal.
+populate_context() {
+    local answer=""
+    local retry="cd $(pwd) && docker compose exec proposal-reviewer uv run --no-sync proposal-reviewer-context \"PROMPT\""
+    if [ -e skills/CONTEXT.md ]; then
+        info "Keeping existing general context (skills/CONTEXT.md)"
+        return 0
+    fi
+    if [ -z "${CONTEXT_PROMPT:-}" ]; then
+        # no terminal (non-interactive install) = do not generate
+        if { : </dev/tty; } 2>/dev/null; then
+            echo
+            echo "The AI can now write a general context (background on the facility's technologies) that"
+            echo "the reviewer gets with every proposal. This calls the AI endpoint and can take several minutes."
+            echo "Default prompt: $DEFAULT_CONTEXT_PROMPT"
+            read -r -p "Prompt for the general context [Enter = default, 'skip' = none]: " answer </dev/tty || true
+            CONTEXT_PROMPT="${answer:-$DEFAULT_CONTEXT_PROMPT}"
+        else
+            CONTEXT_PROMPT="skip"
+        fi
+    fi
+    if [ "$CONTEXT_PROMPT" = "skip" ]; then
+        info "No general context generated. Later: $retry"
+        return 0
+    fi
+
+    info "Generating the general context (this can take several minutes)"
+    # Runs inside the container: no API key needed, writes skills/CONTEXT.md through the mounted volume
+    if docker compose exec -T proposal-reviewer uv run --no-sync proposal-reviewer-context "$CONTEXT_PROMPT" </dev/null; then
+        info "General context stored in $(pwd)/skills/CONTEXT.md (review it; it can be edited by hand)"
+    else
+        warn "Generating the general context failed; the service runs without it."
+        warn "Retry later: $retry"
     fi
 }
 
@@ -142,7 +181,7 @@ AI_API_KEY=${AI_API_KEY:-}
 AI_MODEL=${AI_MODEL:-}
 # Keys clients must send in the X-API-Key header (comma separated, empty = no authentication)
 PROPOSAL_REVIEWER_API_KEYS=${CLIENT_KEY}
-# Key for creating/updating/deleting skills via the API (empty = disabled)
+# Key for editing skills and the general context via the API (empty = disabled)
 PROPOSAL_REVIEWER_ADMIN_KEY=${ADMIN_KEY}
 EOF
     umask "$old_umask"
@@ -173,6 +212,7 @@ for _ in $(seq 1 30); do
         echo "    Client key: ${client_key:-<none, service is open>}   (header X-API-Key; admin key is in .env)"
         echo "    Try:        curl -H 'X-API-Key: ${client_key}' $url/api/v1/info"
         echo "    Logs:       docker compose logs -f      Stop: docker compose down"
+        populate_context
         exit 0
     fi
     sleep 1

@@ -19,6 +19,7 @@ uv run pytest tests/test_api.py::test_skill_roundtrip   # single test
 docker compose up --build                 # container; mounts ./skills and ./config.yaml
 docker compose build && docker compose push   # publish mstarman/knmfi-proposalreviewer:<tag>
 ./install.sh [dir]                        # end-user install from Docker Hub (copies config/skills/prompts out of the image)
+uv run proposal-reviewer-context "PROMPT" [--dry-run]  # generate skills/CONTEXT.md from the CLI (context.py:main; install.sh runs it via docker compose exec)
 uv run proposal-reviewer-client FILE [--area X]  # CLI client (proposal_reviewer/client.py) for the file-upload endpoint
 ```
 

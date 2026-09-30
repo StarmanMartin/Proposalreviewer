@@ -22,13 +22,17 @@ chmod +x install.sh
 
 It creates `docker-compose.yml`, `.env` (AI settings and randomly generated client/admin
 API keys), and copies the default `config.yaml`, `skills/` and `prompts/` out of the image
-so they can be edited. Existing files are never overwritten. For a non-interactive install,
+so they can be edited. Once the service is running it asks for a prompt from which the AI writes
+the [general context](#general-context) (Enter = the KNMFi technologies prompt, `skip` = none).
+Existing files are never overwritten. For a non-interactive install,
 set the answers as environment variables:
 
 ```bash
 AI_PROVIDER=openai AI_BASE_URL=https://ki-toolbox.scc.kit.edu/api AI_API_KEY=... AI_MODEL=... \
   PORT=8000 ./install.sh /opt/proposal-reviewer
 ```
+
+Non-interactive installs generate the general context only when `CONTEXT_PROMPT="..."` is set.
 
 Publishing a new image (maintainers): `docker compose build && docker compose push`
 (the tag is set in `docker-compose.yml` and as `IMAGE` in `install.sh`).
@@ -222,6 +226,9 @@ curl -X POST localhost:8000/api/v1/context/generate \
   `ai.web_max_linked_pages` pages they link to on the same site (linked pages over 50 000
   characters are skipped) and hands the text to the model. The model needs a context window
   large enough for that; lower the setting otherwise.
+- The same from the command line, without an API key (this is what `install.sh` runs):
+  `docker compose exec proposal-reviewer uv run --no-sync proposal-reviewer-context "PROMPT"`
+  (development: `uv run proposal-reviewer-context "PROMPT"`; `--dry-run` prints instead of storing).
 - `GET /api/v1/context` shows the context and the prompt it was generated from. It can also be
   written with `PUT /api/v1/context` (`{"content": "…"}`) or by editing `skills/CONTEXT.md`;
   the file is re-read on every request.
