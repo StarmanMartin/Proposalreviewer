@@ -29,7 +29,7 @@ async def evaluate_proposal(
     system = build_system_prompt(settings.evaluation, skills, load_base_prompt(settings.system_prompt_path))
     # Anthropic enforces the schema natively; other endpoints get it spelled out in the prompt.
     inline_schema = None if provider.name == "anthropic" else schema
-    user = build_user_message(request.title, request.text, request.metadata, inline_schema)
+    user = build_user_message(request.title, request.text, request.metadata, inline_schema, registry.area)
 
     answer = await provider.evaluate(system, user, schema)
 
@@ -46,5 +46,5 @@ async def evaluate_proposal(
         result.weighted_score = round(sum(e.score * e.weight for e in result.skill_evaluations) / total, 2)
 
     return EvaluationResponse(
-        result=result, skills_applied=names, provider=provider.name, model=answer.model, usage=answer.usage
+        result=result, skills_applied=names, area=registry.area, provider=provider.name, model=answer.model, usage=answer.usage
     )

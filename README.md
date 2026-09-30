@@ -11,7 +11,7 @@ evaluated by an AI agent. Two things can be configured:
 ## Installation (Docker)
 
 Requires Docker with the Compose plugin. The install script pulls
-`mstarman/knmfi-proposalreviewer:0.0.1` from Docker Hub, asks for the AI endpoint (KIT
+`mstarman/knmfi-proposalreviewer:0.0.2` from Docker Hub, asks for the AI endpoint (KIT
 KI-Toolbox, Anthropic or another OpenAI-compatible endpoint), and starts the service:
 
 ```bash
@@ -51,13 +51,14 @@ Docker: `docker compose up --build`
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/api/v1/proposals/evaluate` | Evaluate a proposal sent as JSON |
-| POST | `/api/v1/proposals/evaluate/file` | Evaluate an uploaded PDF / .txt / .md (multipart) |
-| GET | `/api/v1/skills` | List skills |
-| GET | `/api/v1/skills/{name}` | Show one skill |
-| PUT | `/api/v1/skills/{name}` | Create/replace a skill (admin key) |
-| DELETE | `/api/v1/skills/{name}` | Delete a skill (admin key) |
-| GET | `/api/v1/info` | Active provider, model, default skills |
+| POST | `/api/v1/proposals/evaluate[?area=…]` | Evaluate a proposal sent as JSON |
+| POST | `/api/v1/proposals/evaluate/file[?area=…]` | Evaluate an uploaded PDF / .txt / .md (multipart) |
+| GET | `/api/v1/areas` | List subject areas that have their own skills |
+| GET | `/api/v1/skills[?area=…]` | List skills (for a subject area: general + area skills) |
+| GET | `/api/v1/skills/{name}[?area=…]` | Show one skill |
+| PUT | `/api/v1/skills/{name}[?area=…]` | Create/replace a skill, in an area if given (admin key) |
+| DELETE | `/api/v1/skills/{name}[?area=…]` | Delete a skill, from an area if given (admin key) |
+| GET | `/api/v1/info` | Active provider, model, default skills, subject areas |
 | GET | `/health` | Liveness check |
 
 If `server.api_keys` is set, clients send one of the keys in the `X-API-Key` header.
@@ -75,6 +76,8 @@ curl -X POST localhost:8000/api/v1/proposals/evaluate \
 
 curl -X POST localhost:8000/api/v1/proposals/evaluate/file \
   -F file=@proposal.pdf -F skills=scientific-merit,methodology
+
+curl -X POST 'localhost:8000/api/v1/proposals/evaluate/file?area=chemistry' -F file=@proposal.pdf
 ```
 
 Or with the bundled command-line client (uploads a PDF / .txt / .md):
@@ -82,7 +85,7 @@ Or with the bundled command-line client (uploads a PDF / .txt / .md):
 ```bash
 export PROPOSAL_REVIEWER_API_KEY=...          # only if server.api_keys is set
 uv run proposal-reviewer-client proposal.pdf --skills scientific-merit,methodology \
-    --metadata '{"requested_hours": 48}'      # --url (default http://localhost:8000), --json for raw output
+    --metadata '{"requested_hours": 48}' --area chemistry   # --url, --json for raw output
 ```
 
 Response (shortened):
@@ -101,6 +104,7 @@ Response (shortened):
     "questions_for_applicant": ["…"]
   },
   "skills_applied": ["scientific-merit", "feasibility", "budget"],
+  "area": null,
   "provider": "anthropic",
   "model": "claude-opus-5-5",
   "usage": {"input_tokens": 3120, "output_tokens": 1450}
@@ -167,6 +171,30 @@ request, so edits take effect without a restart. They can also be managed with
 `PUT`/`DELETE /api/v1/skills/{name}` when `server.admin_api_key` is set.
 
 Shipped skills: `scientific-merit`, `methodology`, `feasibility`, `impact`.
+
+### Subject areas
+
+Proposals can be evaluated for a subject area with the optional `area` query parameter
+(`?area=chemistry`, CLI client: `--area chemistry`). Each area has its own skill directory:
+
+```
+skills/
+  scientific-merit/SKILL.md      general skills, used for every proposal
+  methodology/SKILL.md
+  areas/
+    chemistry/
+      safety/SKILL.md            added for chemistry proposals
+      methodology/SKILL.md       replaces the general methodology skill for chemistry
+```
+
+- With an area, its skills are added to the general skills; an area skill with the same name
+  replaces the general one (also its weight). To drop a general skill for an area, add an area
+  skill with that name and `enabled: false`.
+- The skill selection rules above then apply to this merged set.
+- Without `area`, only the general skills are used. An unknown area is rejected (400).
+- The area name is also passed to the AI (`Subject area: …`) and returned as `area` in the response.
+- Areas are created by adding a directory, or with `PUT /api/v1/skills/{name}?area=…` (admin key).
+  `areas` is reserved and cannot be used as a skill name.
 
 The score scale, the allowed recommendations and extra system-prompt instructions are
 set under `evaluation:`.

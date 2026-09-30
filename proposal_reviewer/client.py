@@ -21,6 +21,7 @@ def evaluate_file(
     title: str | None = None,
     skills: list[str] | None = None,
     metadata: dict[str, Any] | None = None,
+    area: str | None = None,
 ) -> dict[str, Any]:
     """POST a proposal file to the service and return the JSON response."""
     path = Path(path)
@@ -33,7 +34,12 @@ def evaluate_file(
     if metadata:
         data["metadata"] = json.dumps(metadata)
     with path.open("rb") as f:
-        response = client.post(EVALUATE_FILE_PATH, files={"file": (path.name, f, content_type)}, data=data)
+        response = client.post(
+            EVALUATE_FILE_PATH,
+            params={"area": area} if area else None,
+            files={"file": (path.name, f, content_type)},
+            data=data,
+        )
     if response.status_code >= 400:
         try:
             detail = response.json().get("detail", response.text)
@@ -49,6 +55,7 @@ def format_result(body: dict[str, Any]) -> str:
         f"Recommendation: {result['recommendation']}",
         f"Overall score:  {result['overall_score']}",
         f"Weighted score: {result.get('weighted_score')}",
+        f"Subject area:   {body.get('area') or '-'}",
         f"Model:          {body['provider']} / {body['model']}",
         "",
         result["summary"],
@@ -73,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
         "--api-key", default=os.environ.get("PROPOSAL_REVIEWER_API_KEY"), help="Sent as X-API-Key (if the server needs one)"
     )
     parser.add_argument("--title", help="Proposal title (default: file name)")
+    parser.add_argument("--area", help="Subject area whose skill set is used (default: general skills)")
     parser.add_argument("--skills", help="Comma-separated skill names (default: server defaults)")
     parser.add_argument("--metadata", help='JSON object with extra context, e.g. \'{"requested_hours": 48}\'')
     parser.add_argument("--timeout", type=float, default=900, help="Request timeout in seconds (default: 900)")
@@ -90,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         with httpx.Client(base_url=args.url, headers=headers, timeout=args.timeout) as client:
-            body = evaluate_file(client, args.file, args.title, skills, metadata)
+            body = evaluate_file(client, args.file, args.title, skills, metadata, args.area)
     except (RuntimeError, httpx.HTTPError) as e:
         print(e, file=sys.stderr)
         return 1

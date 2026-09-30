@@ -162,3 +162,59 @@ def test_custom_system_prompt_file(settings, provider, tmp_path):
 
 def test_system_prompt_example_matches_default():
     assert load_base_prompt(ROOT / "prompts" / "system_prompt.example.md") == BASE_SYSTEM_PROMPT
+
+
+@pytest.fixture
+def chemistry(settings):
+    area = SkillRegistry(settings.skills_dir).for_area("chemistry", must_exist=False)
+    area.save(Skill(name="beta", weight=2, instructions="Check beta for chemistry."))
+    area.save(Skill(name="safety", instructions="Check lab safety."))
+    return area
+
+
+def test_evaluate_with_area_merges_and_overrides_skills(client, provider, chemistry):
+    r = client.post("/api/v1/proposals/evaluate?area=chemistry", json={"text": "p"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["area"] == "chemistry"
+    assert body["skills_applied"] == ["alpha", "beta", "safety"]
+    system, user, _ = provider.calls[0]
+    assert "Check beta for chemistry." in system and "Check beta." not in system
+    assert "Check lab safety." in system and "Subject area: chemistry" in user
+    # alpha 8*3, beta (area weight 2) 4*2, safety 4*1 -> 36 / 6
+    assert body["result"]["weighted_score"] == 6.0
+
+
+def test_evaluate_without_area_ignores_area_skills(client, chemistry):
+    body = client.post("/api/v1/proposals/evaluate", json={"text": "p"}).json()
+    assert body["skills_applied"] == ["alpha", "beta"] and body["area"] is None
+
+
+def test_unknown_or_invalid_area_is_400(client):
+    assert client.post("/api/v1/proposals/evaluate?area=nope", json={"text": "p"}).status_code == 400
+    assert client.post("/api/v1/proposals/evaluate?area=..%2Fetc", json={"text": "p"}).status_code == 400
+
+
+def test_area_skill_endpoints(client, chemistry):
+    assert client.get("/api/v1/areas").json() == ["chemistry"]
+    assert client.get("/api/v1/info").json()["areas"] == ["chemistry"]
+    skills = {s["name"]: s["area"] for s in client.get("/api/v1/skills?area=chemistry").json()}
+    assert skills == {"alpha": None, "beta": "chemistry", "safety": "chemistry"}
+    assert client.get("/api/v1/skills/safety").status_code == 404
+
+    admin = {"X-API-Key": "admin"}
+    new = {"instructions": "Check beamtime."}
+    assert client.put("/api/v1/skills/beamtime?area=physics", json=new, headers=admin).json()["area"] == "physics"
+    assert client.get("/api/v1/areas").json() == ["chemistry", "physics"]
+    assert client.put("/api/v1/skills/areas", json=new, headers=admin).status_code == 400
+    # deleting the area override makes the general skill visible again
+    assert client.delete("/api/v1/skills/beta?area=chemistry", headers=admin).status_code == 204
+    assert client.get("/api/v1/skills/beta?area=chemistry").json()["area"] is None
+
+
+def test_client_evaluate_file_with_area(client, chemistry, tmp_path):
+    proposal = tmp_path / "proposal.txt"
+    proposal.write_text("Text")
+    body = evaluate_file(client, proposal, area="chemistry")
+    assert body["skills_applied"] == ["alpha", "beta", "safety"]
+    assert "Subject area:   chemistry" in format_result(body)

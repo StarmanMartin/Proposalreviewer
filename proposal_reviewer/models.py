@@ -58,6 +58,7 @@ class EvaluationResult(BaseModel):
 class EvaluationResponse(BaseModel):
     result: EvaluationResult
     skills_applied: list[str]
+    area: str | None = Field(default=None, description="Subject area whose skill set was used.")
     provider: str
     model: str
     usage: dict[str, Any] = Field(default_factory=dict)
@@ -69,6 +70,7 @@ class SkillOut(BaseModel):
     weight: float
     enabled: bool
     instructions: str
+    area: str | None = Field(default=None, description="Subject area the skill belongs to (null = general).")
 
 
 class SkillIn(BaseModel):

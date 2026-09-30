@@ -6,7 +6,7 @@ import secrets
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Security, UploadFile, status
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, Security, UploadFile, status
 from fastapi.security import APIKeyHeader
 from pydantic import ValidationError
 
@@ -20,6 +20,15 @@ from .skills import Skill, SkillError, SkillRegistry
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+Area = Annotated[
+    str | None,
+    Query(
+        description="Subject area. Its skills (skills/areas/<area>/) are added to the general skills; "
+        "an area skill with the same name replaces the general one.",
+        examples=["chemistry"],
+    ),
+]
 
 
 def create_app(settings: Settings | None = None, provider: Provider | None = None) -> FastAPI:
@@ -58,10 +67,10 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
         if not secrets.compare_digest(key or "", admin):
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or missing admin X-API-Key")
 
-    async def run_evaluation(body: ProposalRequest, state: tuple) -> EvaluationResponse:
+    async def run_evaluation(body: ProposalRequest, state: tuple, area: str | None) -> EvaluationResponse:
         settings, registry, provider = state
         try:
-            return await evaluate_proposal(body, provider, registry, settings)
+            return await evaluate_proposal(body, provider, registry.for_area(area), settings)
         except SkillError as e:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
         except AIError as e:
@@ -80,6 +89,7 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
             "model": settings.ai.model,
             "base_url": settings.ai.base_url or None,
             "default_skills": settings.skills.default or [s.name for s in registry.list() if s.enabled],
+            "areas": registry.areas(),
             "score_range": [settings.evaluation.score_min, settings.evaluation.score_max],
             "recommendations": settings.evaluation.recommendations,
         }
@@ -90,9 +100,9 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
         response_model=EvaluationResponse,
         dependencies=[Depends(require_api_key)],
     )
-    async def evaluate(body: ProposalRequest, state: State) -> EvaluationResponse:
+    async def evaluate(body: ProposalRequest, state: State, area: Area = None) -> EvaluationResponse:
         """Evaluate a proposal given as text."""
-        return await run_evaluation(body, state)
+        return await run_evaluation(body, state, area)
 
     @app.post(
         "/api/v1/proposals/evaluate/file",
@@ -106,6 +116,7 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
         title: Annotated[str | None, Form()] = None,
         skills: Annotated[str | None, Form(description="Comma-separated skill names")] = None,
         metadata: Annotated[str | None, Form(description="JSON object with extra context")] = None,
+        area: Area = None,
     ) -> EvaluationResponse:
         """Evaluate a proposal uploaded as a file."""
         data = await file.read(MAX_UPLOAD_BYTES + 1)
@@ -121,25 +132,32 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
             )
         except (json.JSONDecodeError, ValidationError) as e:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Invalid form data: {e}") from e
-        return await run_evaluation(body, state)
+        return await run_evaluation(body, state, area)
+
+    @app.get("/api/v1/areas", tags=["skills"], dependencies=[Depends(require_api_key)])
+    async def list_areas(state: State) -> list[str]:
+        """Subject areas that have their own skill set."""
+        return state[1].areas()
 
     @app.get("/api/v1/skills", tags=["skills"], response_model=list[SkillOut], dependencies=[Depends(require_api_key)])
-    async def list_skills(state: State) -> list[Skill]:
-        return state[1].list()
+    async def list_skills(state: State, area: Area = None) -> list[Skill]:
+        """Skills applied for the given subject area (general skills without area)."""
+        return _scoped(state[1], area).list()
 
     @app.get(
         "/api/v1/skills/{name}", tags=["skills"], response_model=SkillOut, dependencies=[Depends(require_api_key)]
     )
-    async def get_skill(name: str, state: State) -> Skill:
-        return _get_or_404(state[1], name)
+    async def get_skill(name: str, state: State, area: Area = None) -> Skill:
+        return _get_or_404(_scoped(state[1], area), name)
 
     @app.put(
         "/api/v1/skills/{name}", tags=["skills"], response_model=SkillOut, dependencies=[Depends(require_admin_key)]
     )
-    async def put_skill(name: str, body: SkillIn, state: State) -> Skill:
-        """Create or replace a skill (requires the admin key)."""
+    async def put_skill(name: str, body: SkillIn, state: State, area: Area = None) -> Skill:
+        """Create or replace a skill, in a subject area if given (requires the admin key; creates new areas)."""
+        registry = _scoped(state[1], area, must_exist=False)
         try:
-            return state[1].save(Skill(name=name, **body.model_dump()))
+            return registry.save(Skill(name=name, **body.model_dump()))
         except (SkillError, ValidationError) as e:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
 
@@ -149,16 +167,24 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
         status_code=status.HTTP_204_NO_CONTENT,
         dependencies=[Depends(require_admin_key)],
     )
-    async def delete_skill(name: str, state: State) -> None:
-        """Delete a skill (requires the admin key)."""
+    async def delete_skill(name: str, state: State, area: Area = None) -> None:
+        """Delete a skill, from a subject area if given (requires the admin key)."""
+        registry = _scoped(state[1], area)
         try:
-            deleted = state[1].delete(name)
+            deleted = registry.delete(name)
         except SkillError as e:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
         if not deleted:
             raise HTTPException(status.HTTP_404_NOT_FOUND, f"Skill '{name}' not found")
 
     return app
+
+
+def _scoped(registry: SkillRegistry, area: str | None, must_exist: bool = True) -> SkillRegistry:
+    try:
+        return registry.for_area(area, must_exist)
+    except SkillError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
 
 
 def _get_or_404(registry: SkillRegistry, name: str) -> Skill:

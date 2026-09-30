@@ -18,7 +18,7 @@
 
 set -euo pipefail
 
-IMAGE="${IMAGE:-mstarman/knmfi-proposalreviewer:0.0.1}"
+IMAGE="${IMAGE:-mstarman/knmfi-proposalreviewer:0.0.2}"
 PORT="${PORT:-8000}"
 DIR="${1:-proposal-reviewer}"
 KI_TOOLBOX_URL="https://ki-toolbox.scc.kit.edu/api"

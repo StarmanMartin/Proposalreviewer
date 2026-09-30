@@ -87,8 +87,12 @@ def build_system_prompt(config: EvaluationConfig, skills: list[Skill], base_prom
     return "\n\n".join(parts)
 
 
-def build_user_message(title: str | None, text: str, metadata: dict, schema: dict | None = None) -> str:
+def build_user_message(
+    title: str | None, text: str, metadata: dict, schema: dict | None = None, area: str | None = None
+) -> str:
     parts = []
+    if area:
+        parts.append(f"Subject area: {area}")
     if metadata:
         parts.append(f"<metadata>\n{json.dumps(metadata, ensure_ascii=False, indent=2)}\n</metadata>")
     title_part = f"Title: {title}\n\n" if title else ""
