@@ -1,0 +1,33 @@
+[project]
+name = "proposal-reviewer"
+version = "0.1.0"
+description = "Web service that evaluates proposals with a configurable AI agent and configurable evaluation skills"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "pyyaml>=6.0",
+    "httpx>=0.27",
+    "anthropic>=1.9,<2",
+    "pypdf>=5.0",
+    "python-multipart>=0.0.9",
+]
+
+[project.scripts]
+proposal-reviewer = "proposal_reviewer.__main__:main"
+proposal-reviewer-client = "proposal_reviewer.client:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["proposal_reviewer"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

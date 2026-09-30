@@ -1,0 +1,41 @@
+# Proposal Reviewer configuration.
+# ${VAR} and ${VAR:-default} are replaced with environment variables.
+# The file location can be changed with PROPOSAL_REVIEWER_CONFIG.
+
+server:
+  # Keys accepted in the X-API-Key header for evaluation endpoints. Empty list = no auth.
+  api_keys: "${PROPOSAL_REVIEWER_API_KEYS:-}"
+  # Key required to create/update/delete skills over the API. Empty = skill editing disabled.
+  admin_api_key: "${PROPOSAL_REVIEWER_ADMIN_KEY:-}"
+
+ai:
+  # "anthropic" (Claude Messages API) or "openai" (any OpenAI-compatible /chat/completions endpoint)
+  provider: "${AI_PROVIDER:-anthropic}"
+  # Base URL of the endpoint. Empty = provider default (https://api.anthropic.com).
+  # Examples for provider "openai": http://localhost:11434/v1 (Ollama), https://api.openai.com/v1
+  base_url: "${AI_BASE_URL:-}"
+  # Empty = Anthropic SDK resolves credentials from the environment (ANTHROPIC_API_KEY, ...)
+  api_key: "${AI_API_KEY:-}"
+  model: "${AI_MODEL:-claude-opus-5-5}"
+  max_tokens: 32000
+  timeout_seconds: 600
+  # Anthropic only: low | medium | high | xhigh | max (empty = model default)
+  effort: "high"
+  # Anthropic only: on a safety refusal, let the API re-run the request on a fallback model
+  refusal_fallback: true
+  # OpenAI-compatible only: request JSON output via response_format (disable if the server rejects it)
+  json_mode: true
+
+skills:
+  # Directory with one sub-directory per skill, each containing a SKILL.md
+  directory: "${SKILLS_DIR:-skills}"
+  # Skills applied when a request does not name any. Empty list = all enabled skills.
+  default: []
+
+evaluation:
+  # Score scale used in the prompt and the response
+  score_min: 0
+  score_max: 10
+  recommendations: [accept, accept_with_revisions, reject, needs_more_information]
+  # Optional extra instructions appended to the built-in system prompt
+  extra_instructions: ""
