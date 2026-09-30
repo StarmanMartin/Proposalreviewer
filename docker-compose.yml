@@ -1,6 +1,8 @@
 services:
   proposal-reviewer:
     build: .
+    # docker compose build && docker compose push  ->  Docker Hub
+    image: mstarman/knmfi-proposalreviewer:0.0.1
     ports:
       - "8000:8000"
     env_file: .env

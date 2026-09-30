@@ -17,6 +17,8 @@ uv run proposal-reviewer --reload         # dev auto-reload; --config PATH, --ho
 uv run pytest                             # all tests
 uv run pytest tests/test_api.py::test_skill_roundtrip   # single test
 docker compose up --build                 # container; mounts ./skills and ./config.yaml
+docker compose build && docker compose push   # publish mstarman/knmfi-proposalreviewer:<tag>
+./install.sh [dir]                        # end-user install from Docker Hub (copies config/skills/prompts out of the image)
 uv run proposal-reviewer-client FILE      # CLI client (proposal_reviewer/client.py) for the file-upload endpoint
 ```
 

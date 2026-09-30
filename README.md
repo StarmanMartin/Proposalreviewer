@@ -8,7 +8,30 @@ evaluated by an AI agent. Two things can be configured:
 - **the evaluation skills**: markdown files that explain *how* to evaluate a proposal.
   Each skill is scored separately and weighted.
 
-## Quick start
+## Installation (Docker)
+
+Requires Docker with the Compose plugin. The install script pulls
+`mstarman/knmfi-proposalreviewer:0.0.1` from Docker Hub, asks for the AI endpoint (KIT
+KI-Toolbox, Anthropic or another OpenAI-compatible endpoint), and starts the service:
+
+```bash
+./install.sh [install-dir]     # default: ./proposal-reviewer
+```
+
+It creates `docker-compose.yml`, `.env` (AI settings and randomly generated client/admin
+API keys), and copies the default `config.yaml`, `skills/` and `prompts/` out of the image
+so they can be edited. Existing files are never overwritten. For a non-interactive install,
+set the answers as environment variables:
+
+```bash
+AI_PROVIDER=openai AI_BASE_URL=https://ki-toolbox.scc.kit.edu/api AI_API_KEY=... AI_MODEL=... \
+  PORT=8000 ./install.sh /opt/proposal-reviewer
+```
+
+Publishing a new image (maintainers): `docker compose build && docker compose push`
+(the tag is set in `docker-compose.yml` and as `IMAGE` in `install.sh`).
+
+## Quick start (development)
 
 ```bash
 uv sync
